@@ -2,7 +2,16 @@ import { nanoid } from 'nanoid';
 import { projectTotals } from '../../shared/types.ts';
 import { db } from './db.ts';
 
-type StageRow = { id: string; project_id: string; name: string; sort_order: number };
+type StageRow = {
+  id: string;
+  project_id: string;
+  name: string;
+  sort_order: number;
+  extra_materials?: number;
+  extra_labor?: number;
+  extra_note?: string;
+};
+
 type ItemRow = {
   id: string;
   stage_id: string;
@@ -53,6 +62,9 @@ export function getProjectFull(id: string) {
       name: s.name,
       sortOrder: s.sort_order,
       items,
+      extraMaterials: s.extra_materials ?? 0,
+      extraLabor: s.extra_labor ?? 0,
+      extraNote: s.extra_note ?? '',
     };
   });
 
@@ -101,11 +113,9 @@ export function createEmptyProject(name: string) {
   ).run(id, accessKey, name, now, now);
 
   const stageId = nanoid();
-  db.prepare('INSERT INTO stages (id, project_id, name, sort_order) VALUES (?, ?, ?, 0)').run(
-    stageId,
-    id,
-    'Общие работы',
-  );
+  db.prepare(
+    'INSERT INTO stages (id, project_id, name, sort_order, extra_materials, extra_labor, extra_note) VALUES (?, ?, ?, 0, 0, 0, ?)',
+  ).run(stageId, id, 'Общие работы', '');
 
   return getProjectFull(id)!;
 }
@@ -137,12 +147,9 @@ export function createProjectFromTemplate(templateId: string, name?: string) {
 
     for (const stage of stages) {
       const stageId = nanoid();
-      db.prepare('INSERT INTO stages (id, project_id, name, sort_order) VALUES (?, ?, ?, ?)').run(
-        stageId,
-        id,
-        stage.name,
-        stage.sort_order,
-      );
+      db.prepare(
+        'INSERT INTO stages (id, project_id, name, sort_order, extra_materials, extra_labor, extra_note) VALUES (?, ?, ?, ?, 0, 0, ?)',
+      ).run(stageId, id, stage.name, stage.sort_order, '');
       const items = itemsStmt.all(stage.id) as ItemRow[];
       for (const item of items) {
         db.prepare(

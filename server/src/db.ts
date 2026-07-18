@@ -64,7 +64,10 @@ export function initDb() {
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
-      sort_order INTEGER NOT NULL DEFAULT 0
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      extra_materials REAL NOT NULL DEFAULT 0,
+      extra_labor REAL NOT NULL DEFAULT 0,
+      extra_note TEXT DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS line_items (
@@ -80,4 +83,20 @@ export function initDb() {
       sort_order INTEGER NOT NULL DEFAULT 0
     );
   `);
+
+  migrateColumns();
+}
+
+function migrateColumns() {
+  const stageCols = db.prepare('PRAGMA table_info(stages)').all() as Array<{ name: string }>;
+  const names = new Set(stageCols.map((c) => c.name));
+  if (!names.has('extra_materials')) {
+    db.exec('ALTER TABLE stages ADD COLUMN extra_materials REAL NOT NULL DEFAULT 0');
+  }
+  if (!names.has('extra_labor')) {
+    db.exec('ALTER TABLE stages ADD COLUMN extra_labor REAL NOT NULL DEFAULT 0');
+  }
+  if (!names.has('extra_note')) {
+    db.exec("ALTER TABLE stages ADD COLUMN extra_note TEXT DEFAULT ''");
+  }
 }

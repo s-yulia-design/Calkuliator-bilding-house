@@ -224,12 +224,9 @@ app.post('/api/projects/:id/stages', async (c) => {
     .prepare('SELECT COALESCE(MAX(sort_order), -1) AS m FROM stages WHERE project_id = ?')
     .get(projectId) as { m: number };
   const stageId = nanoid();
-  db.prepare('INSERT INTO stages (id, project_id, name, sort_order) VALUES (?, ?, ?, ?)').run(
-    stageId,
-    projectId,
-    body.name?.trim() || 'Новый этап',
-    max.m + 1,
-  );
+  db.prepare(
+    'INSERT INTO stages (id, project_id, name, sort_order, extra_materials, extra_labor, extra_note) VALUES (?, ?, ?, ?, 0, 0, ?)',
+  ).run(stageId, projectId, body.name?.trim() || 'Новый этап', max.m + 1, '');
   touchProject(projectId);
   return c.json(getProjectFull(projectId));
 });
@@ -237,10 +234,33 @@ app.post('/api/projects/:id/stages', async (c) => {
 app.patch('/api/projects/:id/stages/:stageId', async (c) => {
   const projectId = c.req.param('id');
   if (!getProjectFull(projectId)) return c.json({ error: 'Not found' }, 404);
-  const body = await c.req.json<{ name: string }>();
-  db.prepare('UPDATE stages SET name = ? WHERE id = ? AND project_id = ?').run(
-    body.name,
-    c.req.param('stageId'),
+  const body = await c.req.json<{
+    name?: string;
+    extraMaterials?: number;
+    extraLabor?: number;
+    extraNote?: string;
+  }>();
+  const stageId = c.req.param('stageId');
+  const existing = db
+    .prepare('SELECT * FROM stages WHERE id = ? AND project_id = ?')
+    .get(stageId, projectId) as
+    | {
+        name: string;
+        extra_materials: number;
+        extra_labor: number;
+        extra_note: string;
+      }
+    | undefined;
+  if (!existing) return c.json({ error: 'Not found' }, 404);
+  db.prepare(
+    `UPDATE stages SET name = ?, extra_materials = ?, extra_labor = ?, extra_note = ?
+     WHERE id = ? AND project_id = ?`,
+  ).run(
+    body.name ?? existing.name,
+    body.extraMaterials ?? existing.extra_materials ?? 0,
+    body.extraLabor ?? existing.extra_labor ?? 0,
+    body.extraNote ?? existing.extra_note ?? '',
+    stageId,
     projectId,
   );
   touchProject(projectId);

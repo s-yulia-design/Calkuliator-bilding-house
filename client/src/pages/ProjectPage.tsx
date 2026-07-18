@@ -40,7 +40,7 @@ export function ProjectPage() {
 
   const stage = project?.stages.find((s) => s.id === stageId) || project?.stages[0];
   const totals = useMemo(() => (project ? projectTotals(project.stages) : null), [project]);
-  const stageSum = useMemo(() => (stage ? stageTotals(stage.items) : null), [stage]);
+  const stageSum = useMemo(() => (stage ? stageTotals(stage) : null), [stage]);
 
   async function apply(updater: () => Promise<Project>) {
     try {
@@ -52,7 +52,9 @@ export function ProjectPage() {
 
   function exportCsv() {
     if (!project) return;
-    const rows = [['Этап', 'Позиция', 'Ед.', 'Кол-во', 'Цена мат.', 'Работа', 'Материалы', 'Работы', 'Итого']];
+    const rows = [
+      ['Этап', 'Позиция', 'Ед.', 'Кол-во', 'Цена мат.', 'Работа', 'Материалы', 'Работы', 'Итого', 'Заметка'],
+    ];
     for (const s of project.stages) {
       for (const item of s.items) {
         const t = lineItemTotals(item);
@@ -66,10 +68,23 @@ export function ProjectPage() {
           String(t.materials),
           String(t.labor),
           String(t.total),
+          item.note || '',
         ]);
       }
+      rows.push([
+        s.name,
+        'Дополнительно',
+        'сумма',
+        '1',
+        String(s.extraMaterials ?? 0),
+        String(s.extraLabor ?? 0),
+        String(s.extraMaterials ?? 0),
+        String(s.extraLabor ?? 0),
+        String((s.extraMaterials ?? 0) + (s.extraLabor ?? 0)),
+        s.extraNote || '',
+      ]);
     }
-    const csv = rows.map((r) => r.map((c) => `"${c.replaceAll('"', '""')}"`).join(';')).join('\n');
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -170,7 +185,7 @@ export function ProjectPage() {
               onClick={() => {
                 const name = prompt('Переименовать этап', stage.name);
                 if (!name) return;
-                void apply(() => api.renameStage(id, stage.id, name));
+                void apply(() => api.renameStage(id, stage.id, { name }));
               }}
             >
               Переименовать
@@ -249,6 +264,61 @@ export function ProjectPage() {
               void apply(() => api.deleteItem(id, itemId));
             }}
           />
+
+          <div className="card extra-block">
+            <h3>Дополнительно</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Доп. материалы и работы по этому этапу (суммы в ₽) и заметка, что именно делали.
+            </p>
+            <div className="extra-grid">
+              <div className="field">
+                <label>Доп. материалы, ₽</label>
+                <input
+                  type="number"
+                  key={`em-${stage.id}-${stage.extraMaterials}`}
+                  defaultValue={stage.extraMaterials ?? 0}
+                  onBlur={(e) => {
+                    const extraMaterials = Number(e.target.value) || 0;
+                    if (extraMaterials === (stage.extraMaterials ?? 0)) return;
+                    void apply(() => api.renameStage(id, stage.id, { extraMaterials }));
+                  }}
+                />
+              </div>
+              <div className="field">
+                <label>Доп. работы, ₽</label>
+                <input
+                  type="number"
+                  key={`el-${stage.id}-${stage.extraLabor}`}
+                  defaultValue={stage.extraLabor ?? 0}
+                  onBlur={(e) => {
+                    const extraLabor = Number(e.target.value) || 0;
+                    if (extraLabor === (stage.extraLabor ?? 0)) return;
+                    void apply(() => api.renameStage(id, stage.id, { extraLabor }));
+                  }}
+                />
+              </div>
+            </div>
+            <div className="field">
+              <label>Заметка (что за доп. материалы и работы)</label>
+              <textarea
+                rows={3}
+                key={`en-${stage.id}-${stage.extraNote}`}
+                defaultValue={stage.extraNote ?? ''}
+                placeholder="Например: доставка песка, аренда бетононасоса, доп. армирование…"
+                onBlur={(e) => {
+                  const extraNote = e.target.value;
+                  if (extraNote === (stage.extraNote ?? '')) return;
+                  void apply(() => api.renameStage(id, stage.id, { extraNote }));
+                }}
+              />
+            </div>
+            <div className="muted">
+              Доп. к этапу:{' '}
+              <b>
+                {formatMoney((stage.extraMaterials ?? 0) + (stage.extraLabor ?? 0))}
+              </b>
+            </div>
+          </div>
         </>
       )}
 

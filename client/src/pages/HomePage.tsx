@@ -81,7 +81,8 @@ export function HomePage() {
       <section className="card">
         <h1>Новый проект</h1>
         <p className="muted">
-          Создайте пустую смету или возьмите шаблон с объёмами из проекта дома.
+          Создайте пустую смету или возьмите шаблон с объёмами из проекта дома. Данные сохраняются в
+          этом браузере.
         </p>
         <div className="grid-actions">
           <button className="btn btn-primary" disabled={busy} onClick={() => void createEmpty()}>

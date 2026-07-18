@@ -1,101 +1,98 @@
 import type { CatalogItem, Project, ProjectSummary } from '@shared/types';
+import { store, type TemplateFull } from './store';
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-    ...init,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error || 'Ошибка запроса');
-  }
-  return res.json() as Promise<T>;
+function wrap<T>(fn: () => T): Promise<T> {
+  return Promise.resolve().then(fn);
 }
 
 export const api = {
-  health: () => request<{ ok: boolean }>('/api/health'),
+  health: () => wrap(() => ({ ok: true as const })),
 
-  listProjects: () => request<ProjectSummary[]>('/api/projects'),
+  listProjects: () => wrap(() => store.listProjects()),
 
   createProject: (body: { name?: string; templateId?: string }) =>
-    request<Project>('/api/projects', { method: 'POST', body: JSON.stringify(body) }),
+    wrap(() => store.createProject(body)),
 
-  getProject: (id: string) => request<Project>(`/api/projects/${id}`),
+  getProject: (id: string) => wrap(() => store.getProject(id)),
 
-  renameProject: (id: string, name: string) =>
-    request<Project>(`/api/projects/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ name }),
-    }),
+  renameProject: (id: string, name: string) => wrap(() => store.renameProject(id, name)),
 
   deleteProject: (id: string) =>
-    request<{ ok: boolean }>(`/api/projects/${id}`, { method: 'DELETE' }),
-
-  addStage: (id: string, name: string) =>
-    request<Project>(`/api/projects/${id}/stages`, {
-      method: 'POST',
-      body: JSON.stringify({ name }),
+    wrap(() => {
+      store.deleteProject(id);
+      return { ok: true as const };
     }),
 
-  renameStage: (id: string, stageId: string, name: string) =>
-    request<Project>(`/api/projects/${id}/stages/${stageId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ name }),
-    }),
+  addStage: (id: string, name: string) => wrap(() => store.addStage(id, name)),
 
-  deleteStage: (id: string, stageId: string) =>
-    request<Project>(`/api/projects/${id}/stages/${stageId}`, { method: 'DELETE' }),
+  renameStage: (
+    id: string,
+    stageId: string,
+    body: { name?: string; extraMaterials?: number; extraLabor?: number; extraNote?: string },
+  ) => wrap(() => store.updateStage(id, stageId, body)),
+
+  deleteStage: (id: string, stageId: string) => wrap(() => store.deleteStage(id, stageId)),
 
   addItem: (id: string, stageId: string, body: Record<string, unknown>) =>
-    request<Project>(`/api/projects/${id}/stages/${stageId}/items`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
+    wrap(() => store.addItem(id, stageId, body)),
 
   updateItem: (id: string, itemId: string, body: Record<string, unknown>) =>
-    request<Project>(`/api/projects/${id}/items/${itemId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(body),
-    }),
+    wrap(() => store.updateItem(id, itemId, body)),
 
-  deleteItem: (id: string, itemId: string) =>
-    request<Project>(`/api/projects/${id}/items/${itemId}`, { method: 'DELETE' }),
+  deleteItem: (id: string, itemId: string) => wrap(() => store.deleteItem(id, itemId)),
 
-  catalog: () => request<CatalogItem[]>('/api/catalog'),
+  catalog: () => wrap(() => store.catalog()),
 
   createCatalogItem: (body: Partial<CatalogItem>) =>
-    request<{ id: string }>('/api/catalog', { method: 'POST', body: JSON.stringify(body) }),
+    wrap(() => {
+      store.requireAdmin();
+      return store.createCatalogItem(body);
+    }),
 
   updateCatalogItem: (id: string, body: Partial<CatalogItem>) =>
-    request<{ ok: boolean }>(`/api/catalog/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(body),
+    wrap(() => {
+      store.requireAdmin();
+      store.updateCatalogItem(id, body);
+      return { ok: true as const };
     }),
 
   deleteCatalogItem: (id: string) =>
-    request<{ ok: boolean }>(`/api/catalog/${id}`, { method: 'DELETE' }),
+    wrap(() => {
+      store.requireAdmin();
+      store.deleteCatalogItem(id);
+      return { ok: true as const };
+    }),
 
-  templates: () =>
-    request<Array<{ id: string; name: string; description: string }>>('/api/templates'),
+  templates: () => wrap(() => store.templates()),
 
-  getTemplate: (id: string) => request(`/api/templates/${id}`),
+  getTemplate: (id: string) => wrap(() => store.getTemplate(id) as TemplateFull),
 
   updateTemplateItem: (templateId: string, itemId: string, body: Record<string, unknown>) =>
-    request<{ ok: boolean }>(`/api/templates/${templateId}/items/${itemId}`, {
-      method: 'PUT',
-      body: JSON.stringify(body),
+    wrap(() => {
+      store.requireAdmin();
+      store.updateTemplateItem(templateId, itemId, body);
+      return { ok: true as const };
     }),
 
-  adminMe: () => request<{ admin: boolean }>('/api/admin/me'),
+  adminMe: () => wrap(() => ({ admin: store.isAdmin() })),
 
   adminLogin: (password: string) =>
-    request<{ ok: boolean }>('/api/admin/login', {
-      method: 'POST',
-      body: JSON.stringify({ password }),
+    wrap(() => {
+      store.adminLogin(password);
+      return { ok: true as const };
     }),
 
-  adminLogout: () => request<{ ok: boolean }>('/api/admin/logout', { method: 'POST' }),
+  adminLogout: () =>
+    wrap(() => {
+      store.adminLogout();
+      return { ok: true as const };
+    }),
 
-  adminProjects: () => request<ProjectSummary[]>('/api/admin/projects'),
+  adminProjects: () =>
+    wrap(() => {
+      store.requireAdmin();
+      return store.listProjects() as ProjectSummary[];
+    }),
 };
+
+export type { Project, ProjectSummary };

@@ -28,6 +28,12 @@ export interface Stage {
   name: string;
   sortOrder: number;
   items: LineItem[];
+  /** Доп. материалы (сумма ₽) */
+  extraMaterials: number;
+  /** Доп. работы (сумма ₽) */
+  extraLabor: number;
+  /** Заметка: что за доп. материалы и работы */
+  extraNote: string;
 }
 
 export interface Project {
@@ -77,8 +83,17 @@ export function lineItemTotals(item: Pick<LineItem, 'qty' | 'materialPrice' | 'l
   return { materials, labor, total: materials + labor };
 }
 
-export function stageTotals(items: Array<Pick<LineItem, 'qty' | 'materialPrice' | 'laborPrice'>>): Totals {
-  return items.reduce(
+type StageForTotals = {
+  items: Array<Pick<LineItem, 'qty' | 'materialPrice' | 'laborPrice'>>;
+  extraMaterials?: number;
+  extraLabor?: number;
+};
+
+export function stageTotals(stage: StageForTotals | Array<Pick<LineItem, 'qty' | 'materialPrice' | 'laborPrice'>>): Totals {
+  const items = Array.isArray(stage) ? stage : stage.items;
+  const extraMaterials = Array.isArray(stage) ? 0 : (stage.extraMaterials ?? 0);
+  const extraLabor = Array.isArray(stage) ? 0 : (stage.extraLabor ?? 0);
+  const base = items.reduce(
     (acc, item) => {
       const t = lineItemTotals(item);
       return {
@@ -89,12 +104,17 @@ export function stageTotals(items: Array<Pick<LineItem, 'qty' | 'materialPrice' 
     },
     { materials: 0, labor: 0, total: 0 },
   );
+  return {
+    materials: base.materials + extraMaterials,
+    labor: base.labor + extraLabor,
+    total: base.total + extraMaterials + extraLabor,
+  };
 }
 
-export function projectTotals(stages: Array<{ items: Array<Pick<LineItem, 'qty' | 'materialPrice' | 'laborPrice'>> }>): Totals {
+export function projectTotals(stages: StageForTotals[]): Totals {
   return stages.reduce(
     (acc, stage) => {
-      const t = stageTotals(stage.items);
+      const t = stageTotals(stage);
       return {
         materials: acc.materials + t.materials,
         labor: acc.labor + t.labor,

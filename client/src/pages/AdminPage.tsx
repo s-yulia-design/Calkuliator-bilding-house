@@ -106,7 +106,7 @@ export function AdminPage() {
             Войти
           </button>
           <p className="muted" style={{ marginTop: '0.8rem' }}>
-            По умолчанию: admin123 (см. .env)
+            По умолчанию: admin123
           </p>
         </form>
       </div>
