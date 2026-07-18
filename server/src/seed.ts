@@ -110,19 +110,31 @@ function seedTemplate() {
 function ensureEngineeringTemplateStage() {
   const existing = db
     .prepare('SELECT id FROM template_stages WHERE template_id = ? AND name = ?')
-    .get('nigmetova', ENGINEERING) as { id: string } | undefined;
+    .get('001', ENGINEERING) as { id: string } | undefined;
   if (existing) return;
+
+  // совместимость со старым id
+  const legacy = db
+    .prepare('SELECT id FROM template_stages WHERE template_id = ? AND name = ?')
+    .get('nigmetova', ENGINEERING) as { id: string } | undefined;
+  if (legacy) return;
 
   const stageSeed = nigmetovaTemplate.stages.find((s) => s.name === ENGINEERING);
   if (!stageSeed) return;
 
   const max = db
     .prepare('SELECT COALESCE(MAX(sort_order), -1) AS m FROM template_stages WHERE template_id = ?')
-    .get('nigmetova') as { m: number };
+    .get('001') as { m: number } | undefined;
+  const maxLegacy = db
+    .prepare('SELECT COALESCE(MAX(sort_order), -1) AS m FROM template_stages WHERE template_id = ?')
+    .get('nigmetova') as { m: number } | undefined;
+  const templateId = (max?.m ?? -1) >= 0 || !maxLegacy ? '001' : 'nigmetova';
+  const sortBase =
+    templateId === '001' ? (max?.m ?? -1) : (maxLegacy?.m ?? -1);
   const stageId = nanoid();
   db.prepare(
     'INSERT INTO template_stages (id, template_id, name, sort_order) VALUES (?, ?, ?, ?)',
-  ).run(stageId, 'nigmetova', stageSeed.name, max.m + 1);
+  ).run(stageId, templateId, stageSeed.name, sortBase + 1);
 
   const insertItem = db.prepare(
     `INSERT INTO template_items (id, stage_id, name, unit, qty, material_price, labor_price, note, sort_order)

@@ -202,6 +202,124 @@ h3 {
   margin: 0 0 0.2rem;
 }
 
+.disclaimer {
+  border-left: 3px solid var(--warm);
+  background: rgba(184, 134, 74, 0.08);
+}
+
+.disclaimer p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.disclaimer strong {
+  color: var(--ink);
+}
+
+.estimate-summary h2 {
+  margin-bottom: 0.35rem;
+}
+
+.estimate-summary h3 {
+  margin: 1.1rem 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.price-meta {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.summary-grid {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.95rem;
+}
+
+.summary-row-main {
+  font-size: 1.05rem;
+  border-bottom-width: 2px;
+  padding-bottom: 0.55rem;
+}
+
+.stage-cost-list,
+.top-items-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.stage-cost-list li,
+.top-items-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.92rem;
+}
+
+.top-items-list {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+
+.structure-bars {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.structure-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+
+.structure-bar-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(26, 58, 47, 0.08);
+  overflow: hidden;
+}
+
+.structure-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.structure-bar-labor {
+  background: var(--accent-soft);
+}
+
+.structure-bar-delivery {
+  background: var(--warm);
+}
+
+.structure-bar-other {
+  background: #7a6a5a;
+}
+
+.reserve-block {
+  margin-top: 1.1rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--line);
+}
+
 .extra-block {
   margin-top: 1rem;
 }
@@ -238,7 +356,7 @@ h3 {
   color: #f7f3eb;
   backdrop-filter: blur(8px);
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 0.5rem;
   text-align: center;
 }

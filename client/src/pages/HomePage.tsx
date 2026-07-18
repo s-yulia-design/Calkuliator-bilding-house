@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { ProjectSummary } from '@shared/types';
 import { formatMoney } from '@shared/types';
+import { Disclaimer } from '../components/Disclaimer';
 import { api } from '../lib/api';
 
 export function HomePage() {
@@ -45,8 +46,8 @@ export function HomePage() {
     setError('');
     try {
       const p = await api.createProject({
-        templateId: 'nigmetova',
-        name: 'ИЖД Нигметова — смета',
+        templateId: '001',
+        name: 'ИЖД 001 — смета',
       });
       nav(`/p/${p.id}`);
     } catch (e) {
@@ -73,16 +74,19 @@ export function HomePage() {
           Смета ИЖД
           <span>Калькулятор стоимости строительства</span>
         </div>
-        <Link className="btn btn-secondary btn-sm" to="/admin">
-          Админка
+        <Link className="btn btn-secondary btn-sm" to="/prices">
+          Настройка цен
         </Link>
       </header>
 
-      <section className="card">
+      <Disclaimer />
+
+      <section className="card" style={{ marginTop: '1rem' }}>
         <h1>Новый проект</h1>
         <p className="muted">
-          Создайте пустую смету или возьмите шаблон с объёмами из проекта дома. Данные сохраняются в
-          этом браузере.
+          Оба варианта создают те же этапы, что в проекте 001. «Новый пустой» — без
+          объёмов (количества = 0); «Из шаблона» — с типовыми объёмами. Данные
+          сохраняются в этом браузере.
         </p>
         <div className="grid-actions">
           <button className="btn btn-primary" disabled={busy} onClick={() => void createEmpty()}>
@@ -93,7 +97,7 @@ export function HomePage() {
             disabled={busy}
             onClick={() => void createFromTemplate()}
           >
-            Из шаблона ИЖД
+            Из шаблона 001
           </button>
         </div>
       </section>

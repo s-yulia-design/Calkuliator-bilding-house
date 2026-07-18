@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import type { CatalogItem } from '@shared/types';
+import type { CatalogItem, PriceSettings } from '@shared/types';
 import { formatMoney } from '@shared/types';
 import { api } from '../lib/api';
 
@@ -24,113 +23,77 @@ type TemplateFull = {
   }>;
 };
 
-export function AdminPage() {
-  const [admin, setAdmin] = useState(false);
-  const [password, setPassword] = useState('');
-  const [tab, setTab] = useState<'catalog' | 'template' | 'projects'>('catalog');
+export function PricesPage() {
+  const [tab, setTab] = useState<'catalog' | 'template'>('catalog');
   const [error, setError] = useState('');
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [template, setTemplate] = useState<TemplateFull | null>(null);
-  const [projects, setProjects] = useState<
-    Array<{ id: string; name: string; updatedAt: string; totals: { total: number } }>
-  >([]);
-
-  async function check() {
-    try {
-      const me = await api.adminMe();
-      setAdmin(me.admin);
-      if (me.admin) await loadData();
-    } catch {
-      setAdmin(false);
-    }
-  }
+  const [settings, setSettings] = useState<PriceSettings>({
+    region: '',
+    pricesUpdatedAt: '',
+  });
 
   async function loadData() {
-    const [cat, tpl, projs] = await Promise.all([
+    const [cat, tpl, st] = await Promise.all([
       api.catalog(),
-      api.getTemplate('nigmetova') as Promise<TemplateFull>,
-      api.adminProjects(),
+      api.getTemplate('001') as Promise<TemplateFull>,
+      api.getSettings(),
     ]);
     setCatalog(cat);
     setTemplate(tpl);
-    setProjects(projs);
+    setSettings(st);
   }
 
   useEffect(() => {
-    void check();
+    void loadData().catch((e) => setError(e instanceof Error ? e.message : 'Ошибка загрузки'));
   }, []);
-
-  async function login(e: FormEvent) {
-    e.preventDefault();
-    setError('');
-    try {
-      await api.adminLogin(password);
-      setAdmin(true);
-      setPassword('');
-      await loadData();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка входа');
-    }
-  }
-
-  async function logout() {
-    await api.adminLogout();
-    setAdmin(false);
-  }
-
-  if (!admin) {
-    return (
-      <div className="app-shell">
-        <header className="topbar">
-          <div className="brand">
-            Админка
-            <span>Каталог цен и шаблоны</span>
-          </div>
-          <Link className="btn btn-secondary btn-sm" to="/">
-            Калькулятор
-          </Link>
-        </header>
-        <form className="card" onSubmit={(e) => void login(e)} style={{ maxWidth: 400 }}>
-          <h1>Вход</h1>
-          <div className="field">
-            <label>Пароль</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoFocus
-            />
-          </div>
-          {error && <p className="error">{error}</p>}
-          <button className="btn btn-primary" type="submit">
-            Войти
-          </button>
-          <p className="muted" style={{ marginTop: '0.8rem' }}>
-            По умолчанию: admin123
-          </p>
-        </form>
-      </div>
-    );
-  }
 
   return (
     <div className="app-shell">
       <header className="topbar">
         <div className="brand">
-          Админка
-          <span>Управление данными</span>
+          Настройка цен
+          <span>Материалы, работы и актуальность прайса</span>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <Link className="btn btn-secondary btn-sm" to="/">
-            Калькулятор
-          </Link>
-          <button className="btn btn-secondary btn-sm" type="button" onClick={() => void logout()}>
-            Выйти
-          </button>
-        </div>
+        <Link className="btn btn-secondary btn-sm" to="/">
+          Калькулятор
+        </Link>
       </header>
 
-      <nav className="admin-nav">
+      <section className="card">
+        <h2>Актуальность цен</h2>
+        <p className="muted">Эти данные отображаются в итоговой смете, при печати и в экспорте.</p>
+        <div className="extra-grid">
+          <div className="field">
+            <label>Регион</label>
+            <input
+              value={settings.region}
+              onChange={(e) => setSettings({ ...settings, region: e.target.value })}
+              onBlur={() => {
+                void api.updateSettings({ region: settings.region }).catch((err) =>
+                  setError(err instanceof Error ? err.message : 'Ошибка'),
+                );
+              }}
+              placeholder="Московская область"
+            />
+          </div>
+          <div className="field">
+            <label>Дата обновления цен</label>
+            <input
+              type="date"
+              value={settings.pricesUpdatedAt}
+              onChange={(e) => setSettings({ ...settings, pricesUpdatedAt: e.target.value })}
+              onBlur={() => {
+                void api.updateSettings({ pricesUpdatedAt: settings.pricesUpdatedAt }).catch((err) =>
+                  setError(err instanceof Error ? err.message : 'Ошибка'),
+                );
+              }}
+            />
+          </div>
+        </div>
+      </section>
+
+      <nav className="admin-nav" style={{ marginTop: '1rem' }}>
         <button
           type="button"
           className={`btn btn-sm ${tab === 'catalog' ? 'btn-primary' : 'btn-secondary'}`}
@@ -143,84 +106,34 @@ export function AdminPage() {
           className={`btn btn-sm ${tab === 'template' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setTab('template')}
         >
-          Шаблон ИЖД
-        </button>
-        <button
-          type="button"
-          className={`btn btn-sm ${tab === 'projects' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => setTab('projects')}
-        >
-          Все проекты
+          Шаблон 001
         </button>
       </nav>
 
       {error && <p className="error">{error}</p>}
 
       {tab === 'catalog' && (
-        <CatalogAdmin
+        <CatalogEditor
           items={catalog}
-          onChange={async () => {
-            setCatalog(await api.catalog());
-          }}
+          onChange={async () => setCatalog(await api.catalog())}
           onError={setError}
         />
       )}
 
       {tab === 'template' && template && (
-        <TemplateAdmin
+        <TemplateEditor
           template={template}
           onChange={async () => {
-            setTemplate((await api.getTemplate('nigmetova')) as TemplateFull);
+            setTemplate((await api.getTemplate('001')) as TemplateFull);
           }}
           onError={setError}
         />
-      )}
-
-      {tab === 'projects' && (
-        <div className="card">
-          <h2>Проекты на сервере</h2>
-          {projects.length === 0 ? (
-            <p className="muted">Пока нет</p>
-          ) : (
-            <div className="project-list">
-              {projects.map((p) => (
-                <div key={p.id} className="project-row" style={{ cursor: 'default' }}>
-                  <div>
-                    <h3>{p.name}</h3>
-                    <div className="muted">
-                      обновлён {new Date(p.updatedAt).toLocaleString('ru-RU')}
-                      {'totals' in p && p.totals
-                        ? ` · ${formatMoney(p.totals.total)}`
-                        : ''}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.4rem' }}>
-                    <Link className="btn btn-secondary btn-sm" to={`/p/${p.id}`}>
-                      Открыть
-                    </Link>
-                    <button
-                      className="btn btn-danger btn-sm"
-                      type="button"
-                      onClick={async () => {
-                        if (!confirm('Удалить проект?')) return;
-                        await api.deleteProject(p.id);
-                        setProjects(await api.adminProjects());
-                      }}
-                    >
-                      Удалить
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       )}
     </div>
   );
 }
 
-function CatalogAdmin({
+function CatalogEditor({
   items,
   onChange,
   onError,
@@ -254,7 +167,10 @@ function CatalogAdmin({
         }}
       >
         <h2>Новая позиция каталога</h2>
-        <div className="row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '0.5rem' }}>
+        <div
+          className="row"
+          style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '0.5rem' }}
+        >
           <div className="field">
             <label>Название</label>
             <input
@@ -373,7 +289,7 @@ function CatalogAdmin({
   );
 }
 
-function TemplateAdmin({
+function TemplateEditor({
   template,
   onChange,
   onError,
@@ -465,7 +381,9 @@ function TemplateAdmin({
                             .then(onChange);
                         }}
                       />
-                      <div className="muted">{formatMoney(item.qty * (item.materialPrice + item.laborPrice))}</div>
+                      <div className="muted">
+                        {formatMoney(item.qty * (item.materialPrice + item.laborPrice))}
+                      </div>
                     </td>
                   </tr>
                 ))}

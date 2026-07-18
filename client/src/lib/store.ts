@@ -1,10 +1,8 @@
-import type { CatalogItem, LineItem, Project, ProjectSummary, Stage } from '@shared/types';
-import { projectTotals } from '@shared/types';
+import type { CatalogItem, LineItem, PriceSettings, Project, ProjectSummary, Stage } from '@shared/types';
+import { normalizeProject, projectTotals } from '@shared/types';
 import { defaultCatalog, nigmetovaTemplate } from '@shared/seed-data';
 
 const STORAGE_KEY = 'calc_izh_v3';
-const ADMIN_KEY = 'calc_izh_admin';
-const ADMIN_PASSWORD = 'admin123';
 
 export type TemplateFull = {
   id: string;
@@ -31,6 +29,12 @@ type Db = {
   projects: Project[];
   catalog: CatalogItem[];
   templates: TemplateFull[];
+  settings: PriceSettings;
+};
+
+const DEFAULT_SETTINGS: PriceSettings = {
+  region: 'Московская область',
+  pricesUpdatedAt: '2026-07-01',
 };
 
 function uid(): string {
@@ -39,6 +43,18 @@ function uid(): string {
 
 function now(): string {
   return new Date().toISOString();
+}
+
+function defaultProjectFields(areaM2 = 0): Pick<
+  Project,
+  'areaM2' | 'deliveryCost' | 'deliveryIncluded' | 'reservePercent'
+> {
+  return {
+    areaM2,
+    deliveryCost: 0,
+    deliveryIncluded: true,
+    reservePercent: 10,
+  };
 }
 
 function buildDefaultTemplate(): TemplateFull {
@@ -79,10 +95,21 @@ function load(): Db {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as Db;
+      const parsed = JSON.parse(raw) as Partial<Db>;
       if (parsed.projects && parsed.catalog && parsed.templates) {
-        ensureEngineering(parsed);
-        return parsed;
+        const db: Db = {
+          projects: parsed.projects.map((p) => normalizeProject(p as Project)),
+          catalog: parsed.catalog,
+          templates: parsed.templates,
+          settings: {
+            region: parsed.settings?.region || DEFAULT_SETTINGS.region,
+            pricesUpdatedAt: parsed.settings?.pricesUpdatedAt || DEFAULT_SETTINGS.pricesUpdatedAt,
+          },
+        };
+        ensureEngineering(db);
+        migrateTemplateIds(db);
+        save(db);
+        return db;
       }
     }
   } catch {
@@ -92,9 +119,31 @@ function load(): Db {
     projects: [],
     catalog: buildDefaultCatalog(),
     templates: [buildDefaultTemplate()],
+    settings: { ...DEFAULT_SETTINGS },
   };
   save(db);
   return db;
+}
+
+/** Старый id шаблона nigmetova → 001 */
+function migrateTemplateIds(db: Db) {
+  for (const tpl of db.templates) {
+    if (tpl.id === 'nigmetova') {
+      tpl.id = '001';
+      tpl.name = 'ИЖД 001 (шаблон)';
+      if (tpl.description?.includes('Нигметов')) {
+        tpl.description = '1 этаж ~74 м², застройка ~96 м². Типовые объёмы для сметы.';
+      }
+    }
+    if (tpl.name.includes('Нигметов')) {
+      tpl.name = tpl.name.replace(/Нигметова?/g, '001');
+    }
+  }
+  for (const p of db.projects) {
+    if (p.name.includes('Нигметов')) {
+      p.name = p.name.replace(/Нигметова?/g, '001');
+    }
+  }
 }
 
 function ensureEngineering(db: Db) {
@@ -163,19 +212,31 @@ function findProject(db: Db, id: string): Project {
 }
 
 function summary(p: Project): ProjectSummary {
+  const n = normalizeProject(p);
+  const base = projectTotals(n.stages);
+  const delivery = n.deliveryIncluded ? n.deliveryCost : 0;
   return {
-    id: p.id,
-    name: p.name,
-    createdAt: p.createdAt,
-    updatedAt: p.updatedAt,
-    stageCount: p.stages.length,
-    totals: projectTotals(p.stages),
+    id: n.id,
+    name: n.name,
+    createdAt: n.createdAt,
+    updatedAt: n.updatedAt,
+    stageCount: n.stages.length,
+    totals: {
+      materials: base.materials,
+      labor: base.labor,
+      total: base.total + delivery,
+    },
   };
 }
 
-function cloneFromTemplate(tpl: TemplateFull, name?: string): Project {
+function cloneFromTemplate(
+  tpl: TemplateFull,
+  name?: string,
+  options?: { clearQuantities?: boolean },
+): Project {
   const id = uid();
   const created = now();
+  const clear = options?.clearQuantities === true;
   const stages: Stage[] = tpl.stages.map((s, si) => {
     const stageId = uid();
     const items: LineItem[] = s.items.map((item, ii) => ({
@@ -183,9 +244,9 @@ function cloneFromTemplate(tpl: TemplateFull, name?: string): Project {
       stageId,
       name: item.name,
       unit: item.unit,
-      qty: item.qty,
-      materialPrice: item.materialPrice,
-      laborPrice: item.laborPrice,
+      qty: clear ? 0 : item.qty,
+      materialPrice: clear ? 0 : item.materialPrice,
+      laborPrice: clear ? 0 : item.laborPrice,
       note: item.note || '',
       sortOrder: ii,
     }));
@@ -206,6 +267,7 @@ function cloneFromTemplate(tpl: TemplateFull, name?: string): Project {
     createdAt: created,
     updatedAt: created,
     stages,
+    ...defaultProjectFields(tpl.id === '001' || tpl.id === 'nigmetova' ? 73.93 : 0),
   };
 }
 
@@ -218,42 +280,27 @@ export const store = {
   },
 
   getProject(id: string): Project {
-    return structuredClone(findProject(load(), id));
+    return structuredClone(normalizeProject(findProject(load(), id)));
   },
 
   createProject(body: { name?: string; templateId?: string }): Project {
     const db = load();
-    let project: Project;
-    if (body.templateId) {
-      const tpl = db.templates.find((t) => t.id === body.templateId);
-      if (!tpl) throw new Error('Шаблон не найден');
-      project = cloneFromTemplate(tpl, body.name);
-    } else {
-      const id = uid();
-      const created = now();
-      const stageId = uid();
-      project = {
-        id,
-        name: body.name?.trim() || 'Новый проект',
-        createdAt: created,
-        updatedAt: created,
-        stages: [
-          {
-            id: stageId,
-            projectId: id,
-            name: 'Общие работы',
-            sortOrder: 0,
-            items: [],
-            extraMaterials: 0,
-            extraLabor: 0,
-            extraNote: '',
-          },
-        ],
-      };
-    }
+    const tpl =
+      db.templates.find((t) => t.id === (body.templateId || '001')) ||
+      db.templates.find((t) => t.id === 'nigmetova') ||
+      db.templates[0];
+    if (!tpl) throw new Error('Шаблон не найден');
+
+    // Без templateId — те же этапы/позиции, что у шаблона 001, но объёмы пустые (0)
+    const project = body.templateId
+      ? cloneFromTemplate(tpl, body.name)
+      : cloneFromTemplate(tpl, body.name?.trim() || 'Новый проект', {
+          clearQuantities: true,
+        });
+
     db.projects.unshift(project);
     save(db);
-    return structuredClone(project);
+    return structuredClone(normalizeProject(project));
   },
 
   renameProject(id: string, name: string): Project {
@@ -262,7 +309,25 @@ export const store = {
     p.name = name;
     touch(p);
     save(db);
-    return structuredClone(p);
+    return structuredClone(normalizeProject(p));
+  },
+
+  updateProject(
+    id: string,
+    body: Partial<
+      Pick<Project, 'name' | 'areaM2' | 'deliveryCost' | 'deliveryIncluded' | 'reservePercent'>
+    >,
+  ): Project {
+    const db = load();
+    const p = findProject(db, id);
+    if (body.name !== undefined) p.name = body.name;
+    if (body.areaM2 !== undefined) p.areaM2 = body.areaM2;
+    if (body.deliveryCost !== undefined) p.deliveryCost = body.deliveryCost;
+    if (body.deliveryIncluded !== undefined) p.deliveryIncluded = body.deliveryIncluded;
+    if (body.reservePercent !== undefined) p.reservePercent = body.reservePercent;
+    touch(p);
+    save(db);
+    return structuredClone(normalizeProject(p));
   },
 
   deleteProject(id: string): void {
@@ -305,7 +370,7 @@ export const store = {
     if (body.extraNote !== undefined) stage.extraNote = body.extraNote;
     touch(p);
     save(db);
-    return structuredClone(p);
+    return structuredClone(normalizeProject(p));
   },
 
   deleteStage(id: string, stageId: string): Project {
@@ -314,7 +379,7 @@ export const store = {
     p.stages = p.stages.filter((s) => s.id !== stageId);
     touch(p);
     save(db);
-    return structuredClone(p);
+    return structuredClone(normalizeProject(p));
   },
 
   addItem(id: string, stageId: string, body: Record<string, unknown>): Project {
@@ -462,20 +527,15 @@ export const store = {
     throw new Error('Позиция не найдена');
   },
 
-  isAdmin(): boolean {
-    return sessionStorage.getItem(ADMIN_KEY) === '1';
+  getSettings(): PriceSettings {
+    return { ...load().settings };
   },
 
-  adminLogin(password: string): void {
-    if (password !== ADMIN_PASSWORD) throw new Error('Неверный пароль');
-    sessionStorage.setItem(ADMIN_KEY, '1');
-  },
-
-  adminLogout(): void {
-    sessionStorage.removeItem(ADMIN_KEY);
-  },
-
-  requireAdmin(): void {
-    if (!store.isAdmin()) throw new Error('Unauthorized');
+  updateSettings(body: Partial<PriceSettings>): PriceSettings {
+    const db = load();
+    if (body.region !== undefined) db.settings.region = body.region;
+    if (body.pricesUpdatedAt !== undefined) db.settings.pricesUpdatedAt = body.pricesUpdatedAt;
+    save(db);
+    return { ...db.settings };
   },
 };

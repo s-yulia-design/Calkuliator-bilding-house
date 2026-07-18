@@ -1,4 +1,4 @@
-import type { CatalogItem, Project, ProjectSummary } from '@shared/types';
+import type { CatalogItem, PriceSettings, Project, ProjectSummary } from '@shared/types';
 import { store, type TemplateFull } from './store';
 
 function wrap<T>(fn: () => T): Promise<T> {
@@ -16,6 +16,13 @@ export const api = {
   getProject: (id: string) => wrap(() => store.getProject(id)),
 
   renameProject: (id: string, name: string) => wrap(() => store.renameProject(id, name)),
+
+  updateProject: (
+    id: string,
+    body: Partial<
+      Pick<Project, 'name' | 'areaM2' | 'deliveryCost' | 'deliveryIncluded' | 'reservePercent'>
+    >,
+  ) => wrap(() => store.updateProject(id, body)),
 
   deleteProject: (id: string) =>
     wrap(() => {
@@ -43,22 +50,16 @@ export const api = {
 
   catalog: () => wrap(() => store.catalog()),
 
-  createCatalogItem: (body: Partial<CatalogItem>) =>
-    wrap(() => {
-      store.requireAdmin();
-      return store.createCatalogItem(body);
-    }),
+  createCatalogItem: (body: Partial<CatalogItem>) => wrap(() => store.createCatalogItem(body)),
 
   updateCatalogItem: (id: string, body: Partial<CatalogItem>) =>
     wrap(() => {
-      store.requireAdmin();
       store.updateCatalogItem(id, body);
       return { ok: true as const };
     }),
 
   deleteCatalogItem: (id: string) =>
     wrap(() => {
-      store.requireAdmin();
       store.deleteCatalogItem(id);
       return { ok: true as const };
     }),
@@ -69,30 +70,13 @@ export const api = {
 
   updateTemplateItem: (templateId: string, itemId: string, body: Record<string, unknown>) =>
     wrap(() => {
-      store.requireAdmin();
       store.updateTemplateItem(templateId, itemId, body);
       return { ok: true as const };
     }),
 
-  adminMe: () => wrap(() => ({ admin: store.isAdmin() })),
+  getSettings: () => wrap(() => store.getSettings()),
 
-  adminLogin: (password: string) =>
-    wrap(() => {
-      store.adminLogin(password);
-      return { ok: true as const };
-    }),
-
-  adminLogout: () =>
-    wrap(() => {
-      store.adminLogout();
-      return { ok: true as const };
-    }),
-
-  adminProjects: () =>
-    wrap(() => {
-      store.requireAdmin();
-      return store.listProjects() as ProjectSummary[];
-    }),
+  updateSettings: (body: Partial<PriceSettings>) => wrap(() => store.updateSettings(body)),
 };
 
 export type { Project, ProjectSummary };

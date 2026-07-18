@@ -1,13 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { CatalogItem, LineItem, Project } from '@shared/types';
-import { formatMoney, lineItemTotals, projectTotals, stageTotals } from '@shared/types';
+import type { CatalogItem, LineItem, PriceSettings, Project } from '@shared/types';
+import {
+  buildEstimateBreakdown,
+  formatDateRu,
+  formatMoney,
+  lineItemTotals,
+  stageTotals,
+} from '@shared/types';
+import { Disclaimer } from '../components/Disclaimer';
+import { EstimateSummary } from '../components/EstimateSummary';
 import { api } from '../lib/api';
 
 export function ProjectPage() {
   const { id = '' } = useParams();
 
   const [project, setProject] = useState<Project | null>(null);
+  const [settings, setSettings] = useState<PriceSettings>({
+    region: '',
+    pricesUpdatedAt: '',
+  });
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [stageId, setStageId] = useState<string>('');
   const [error, setError] = useState('');
@@ -23,9 +35,14 @@ export function ProjectPage() {
     setLoading(true);
     setError('');
     try {
-      const [p, cat] = await Promise.all([api.getProject(id), api.catalog()]);
+      const [p, cat, st] = await Promise.all([
+        api.getProject(id),
+        api.catalog(),
+        api.getSettings(),
+      ]);
       setProject(p);
       setCatalog(cat);
+      setSettings(st);
       setStageId((prev) => prev || p.stages[0]?.id || '');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка загрузки');
@@ -39,7 +56,10 @@ export function ProjectPage() {
   }, [load]);
 
   const stage = project?.stages.find((s) => s.id === stageId) || project?.stages[0];
-  const totals = useMemo(() => (project ? projectTotals(project.stages) : null), [project]);
+  const breakdown = useMemo(
+    () => (project ? buildEstimateBreakdown(project) : null),
+    [project],
+  );
   const stageSum = useMemo(() => (stage ? stageTotals(stage) : null), [stage]);
 
   async function apply(updater: () => Promise<Project>) {
@@ -51,8 +71,11 @@ export function ProjectPage() {
   }
 
   function exportCsv() {
-    if (!project) return;
-    const rows = [
+    if (!project || !breakdown) return;
+    const rows: string[][] = [
+      ['Регион', settings.region],
+      ['Дата обновления цен', formatDateRu(settings.pricesUpdatedAt)],
+      [],
       ['Этап', 'Позиция', 'Ед.', 'Кол-во', 'Цена мат.', 'Работа', 'Материалы', 'Работы', 'Итого', 'Заметка'],
     ];
     for (const s of project.stages) {
@@ -84,7 +107,25 @@ export function ProjectPage() {
         s.extraNote || '',
       ]);
     }
-    const csv = rows.map((r) => r.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(';')).join('\n');
+    rows.push([]);
+    rows.push(['Доставка материалов', String(breakdown.delivery)]);
+    rows.push([
+      'Доставка включена в итог',
+      breakdown.deliveryIncluded ? 'да' : 'нет',
+    ]);
+    rows.push(['Стоимость материалов', String(breakdown.materials)]);
+    rows.push(['Стоимость работ', String(breakdown.labor)]);
+    rows.push(['Прочие расходы', String(breakdown.other)]);
+    rows.push(['Общая стоимость проекта', String(breakdown.projectTotal)]);
+    rows.push([`Резерв ${breakdown.reservePercent}%`, String(breakdown.reserveAmount)]);
+    rows.push(['Полный рекомендуемый бюджет', String(breakdown.recommendedBudget)]);
+    if (breakdown.perSqm != null) {
+      rows.push(['Стоимость за 1 м²', String(Math.round(breakdown.perSqm))]);
+    }
+
+    const csv = rows
+      .map((r) => r.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(';'))
+      .join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -322,19 +363,108 @@ export function ProjectPage() {
         </>
       )}
 
-      {totals && (
+      <section className="card extra-block no-print" style={{ marginTop: '1.25rem' }}>
+        <h3>Параметры сметы</h3>
+        <div className="extra-grid">
+          <div className="field">
+            <label>Площадь дома, м²</label>
+            <input
+              type="number"
+              key={`area-${project.id}-${project.areaM2}`}
+              defaultValue={project.areaM2 ?? 0}
+              onBlur={(e) => {
+                const areaM2 = Number(e.target.value) || 0;
+                if (areaM2 === (project.areaM2 ?? 0)) return;
+                void apply(() => api.updateProject(id, { areaM2 }));
+              }}
+            />
+          </div>
+          <div className="field">
+            <label>Резерв на непредвиденные, %</label>
+            <input
+              type="number"
+              key={`res-${project.id}-${project.reservePercent}`}
+              defaultValue={project.reservePercent ?? 10}
+              onBlur={(e) => {
+                const reservePercent = Number(e.target.value);
+                if (reservePercent === (project.reservePercent ?? 10)) return;
+                void apply(() =>
+                  api.updateProject(id, {
+                    reservePercent: Number.isFinite(reservePercent) ? reservePercent : 10,
+                  }),
+                );
+              }}
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="card extra-block no-print">
+        <h3>Доставка материалов</h3>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Отдельная строка сметы — не смешивается со стоимостью материалов.
+        </p>
+        <div className="extra-grid">
+          <div className="field">
+            <label>Стоимость доставки, ₽</label>
+            <input
+              type="number"
+              key={`del-${project.id}-${project.deliveryCost}`}
+              defaultValue={project.deliveryCost ?? 0}
+              onBlur={(e) => {
+                const deliveryCost = Number(e.target.value) || 0;
+                if (deliveryCost === (project.deliveryCost ?? 0)) return;
+                void apply(() => api.updateProject(id, { deliveryCost }));
+              }}
+            />
+          </div>
+          <div className="field" style={{ justifyContent: 'flex-end' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1.5rem' }}>
+              <input
+                type="checkbox"
+                checked={project.deliveryIncluded !== false}
+                onChange={(e) =>
+                  void apply(() =>
+                    api.updateProject(id, { deliveryIncluded: e.target.checked }),
+                  )
+                }
+              />
+              Включить доставку в общую стоимость
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <div style={{ marginTop: '1.25rem' }}>
+        <Disclaimer />
+      </div>
+
+      {breakdown && (
+        <div style={{ marginTop: '1rem' }}>
+          <EstimateSummary breakdown={breakdown} settings={settings} />
+        </div>
+      )}
+
+      {breakdown && (
         <div className="totals-bar">
           <div>
             <span>Материалы</span>
-            <strong>{formatMoney(totals.materials)}</strong>
+            <strong>{formatMoney(breakdown.materials)}</strong>
           </div>
           <div>
             <span>Работы</span>
-            <strong>{formatMoney(totals.labor)}</strong>
+            <strong>{formatMoney(breakdown.labor)}</strong>
           </div>
           <div>
-            <span>Всего по дому</span>
-            <strong>{formatMoney(totals.total)}</strong>
+            <span>Доставка</span>
+            <strong>
+              {formatMoney(breakdown.delivery)}
+              {!breakdown.deliveryIncluded ? '*' : ''}
+            </strong>
+          </div>
+          <div>
+            <span>Всего</span>
+            <strong>{formatMoney(breakdown.projectTotal)}</strong>
           </div>
         </div>
       )}
