@@ -40,15 +40,13 @@ server/   — опциональный API (для разработки, не н
 
 ## Деплой на GitHub Pages
 
-При push в `main` срабатывает Actions → публикуется приложение (не README).
-
-В настройках репозитория (**Settings → Pages**) выберите одно из:
-
-1. **Source: GitHub Actions** (предпочтительно), или  
-2. **Deploy from a branch** → ветка `gh-pages` → папка `/`
+При push в `main` собирается приложение и публикуется в корень репозитория (и в Actions / ветку `gh-pages`).
 
 Одна и та же ссылка работает на компьютере и на телефоне:
 
 https://s-yulia-design.github.io/Calkuliator-bilding-house/
+
+В Settings → Pages можно оставить **Deploy from a branch** → `main` → `/`  
+или выбрать **GitHub Actions**.
 
 Сборка с префиксом `/Calkuliator-bilding-house/`.

@@ -17,9 +17,6 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,6 +36,29 @@ jobs:
           touch client/dist/.nojekyll
           cp client/dist/index.html client/dist/404.html
 
+      # Публикуем сборку в корень main — так сайт открывается
+      # даже если в Settings выбран «Deploy from a branch» → main → /
+      - name: Publish site to repository root
+        run: |
+          rm -rf assets
+          rm -f index.html 404.html .nojekyll favicon.svg icons.svg \
+            manifest.webmanifest registerSW.js sw.js workbox-*.js
+          cp -r client/dist/assets ./assets
+          cp client/dist/index.html client/dist/404.html client/dist/.nojekyll ./
+          cp client/dist/favicon.svg client/dist/icons.svg \
+            client/dist/manifest.webmanifest client/dist/registerSW.js client/dist/sw.js ./
+          cp client/dist/workbox-*.js ./
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets index.html 404.html .nojekyll favicon.svg icons.svg \
+            manifest.webmanifest registerSW.js sw.js workbox-*.js
+          if git diff --staged --quiet; then
+            echo "Site files unchanged"
+          else
+            git commit -m "deploy: publish static site for GitHub Pages [skip ci]"
+            git push
+          fi
+
       - name: Enable GitHub Actions for Pages
         continue-on-error: true
         env:
@@ -55,10 +75,11 @@ jobs:
           path: client/dist
 
       - id: deployment
+        continue-on-error: true
         uses: actions/deploy-pages@v4
 
-      # Запасной вариант: ветка gh-pages (если в Settings всё ещё «Deploy from a branch»)
       - name: Publish gh-pages branch
+        continue-on-error: true
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
