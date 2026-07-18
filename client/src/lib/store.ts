@@ -125,24 +125,27 @@ function load(): Db {
   return db;
 }
 
-/** Старый id шаблона nigmetova → 001 */
+/** Старый id шаблона nigmetova → 001; убрать «Нигметова» из названий */
 function migrateTemplateIds(db: Db) {
+  const rename = (s: string) =>
+    s
+      .replace(/Нигметовой/gi, '001')
+      .replace(/Нигметова/gi, '001')
+      .replace(/Нигметов/gi, '001')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/\s+—/g, ' —')
+      .trim();
+
   for (const tpl of db.templates) {
-    if (tpl.id === 'nigmetova') {
-      tpl.id = '001';
-      tpl.name = 'ИЖД 001 (шаблон)';
-      if (tpl.description?.includes('Нигметов')) {
-        tpl.description = '1 этаж ~74 м², застройка ~96 м². Типовые объёмы для сметы.';
-      }
-    }
-    if (tpl.name.includes('Нигметов')) {
-      tpl.name = tpl.name.replace(/Нигметова?/g, '001');
+    if (tpl.id === 'nigmetova') tpl.id = '001';
+    if (/нигметов/i.test(tpl.name)) tpl.name = rename(tpl.name);
+    if (tpl.id === '001') tpl.name = 'ИЖД 001 (шаблон)';
+    if (/нигметов/i.test(tpl.description || '')) {
+      tpl.description = '1 этаж ~74 м², застройка ~96 м². Типовые объёмы для сметы.';
     }
   }
   for (const p of db.projects) {
-    if (p.name.includes('Нигметов')) {
-      p.name = p.name.replace(/Нигметова?/g, '001');
-    }
+    if (/нигметов/i.test(p.name)) p.name = rename(p.name);
   }
 }
 
