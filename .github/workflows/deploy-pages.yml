@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -15,28 +15,52 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-      - run: npm install
-      - run: npm run build -w client
-        env:
-          GITHUB_PAGES: 'true'
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: client/dist
-
   deploy:
-    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm install
+
+      - run: npm run build -w client
+        env:
+          GITHUB_PAGES: 'true'
+
+      - name: Prepare static files
+        run: |
+          touch client/dist/.nojekyll
+          cp client/dist/index.html client/dist/404.html
+
+      - name: Enable GitHub Actions for Pages
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh api "repos/${{ github.repository }}/pages" >/dev/null 2>&1; then
+            gh api --method PUT "repos/${{ github.repository }}/pages" -f build_type=workflow
+          else
+            gh api --method POST "repos/${{ github.repository }}/pages" -f build_type=workflow
+          fi
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: client/dist
+
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      # Запасной вариант: ветка gh-pages (если в Settings всё ещё «Deploy from a branch»)
+      - name: Publish gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./client/dist
+          force_orphan: true
